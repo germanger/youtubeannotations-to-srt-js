@@ -1,0 +1,186 @@
+
+<!DOCTYPE html>
+<html ng-app="youtubeAnnotationsToSrtApp">
+<head>
+    <title>Youtube Annotations to SRT</title>
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+          
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/angularjs-toaster/0.4.15/toaster.min.css" />
+    <link rel="stylesheet" href="https://rawgit.com/germanger/angular-vertical-resizer/master/vertical-resizer.min.css" />
+    
+    <style>
+        h2 {
+            font-size: 20px;
+        }
+        
+        .bordered {
+            border: 1px solid black;
+        }
+    </style>
+    
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.3.14/angular.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/angular-ui-bootstrap/0.12.1/ui-bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/angular-ui-bootstrap/0.12.1/ui-bootstrap-tpls.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/angularjs-toaster/0.4.15/toaster.min.js"></script>
+    <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+    <script src="https://rawgit.com/germanger/angular-vertical-resizer/master/vertical-resizer.min.js"></script>
+
+    <script>
+        angular.module('youtubeAnnotationsToSrtApp', ['ui.bootstrap', 'toaster', 'verticalResizer']);
+        
+        angular.module('youtubeAnnotationsToSrtApp').directive('fileReader', function() {
+            return {
+                scope: {
+                    fileReader:"="
+                },
+                link: function(scope, element) {
+                    element.on('change', function(changeEvent) {
+                        var files = changeEvent.target.files;
+                        if (files.length) {
+                            var r = new FileReader();
+                            r.onload = function(e) {
+                                var contents = e.target.result;
+                                scope.$apply(function () {
+                                    scope.fileReader = contents;
+                                });
+                            };
+
+                            r.readAsText(files[0]);
+                        }
+                    });
+                }
+            };
+        });
+                
+        angular.module('youtubeAnnotationsToSrtApp').controller('mainController', ['$scope', '$http', '$window', 'toaster', '$filter', function ($scope, $http, $window, toaster, $filter) {
+
+            $scope.xmlContent = "";
+            $scope.subtitleLines = [];
+            
+            $scope.formatTime = function(timeCode) {
+                if (timeCode.length == 9) {
+                    return "00:" + timeCode;
+                } else if (timeCode.length == 8) {
+                    return "00:0" + timeCode;
+                } else if (timeCode.length == 6) {
+                    return "00:00:" + timeCode;
+                }
+                
+                return timeCode;
+            };
+
+            $scope.process = function () {
+                $scope.processing = true;
+                
+                // Parse with jQuery
+                var xmlDoc = $.parseXML($scope.xmlContent);
+                
+                $(xmlDoc).find("annotation").each(function(index) {
+                    $scope.subtitleLines.push({
+                        text: $(this).find("TEXT").text(),
+                        startTime: $scope.formatTime($(this).find("rectRegion:eq(0)").attr("t")),
+                        endTime: $scope.formatTime($(this).find("rectRegion:eq(1)").attr("t"))
+                    });
+                });
+                
+                // Sort
+                $scope.subtitleLines = $filter("orderBy")($scope.subtitleLines, "startTime");
+                
+                $scope.processing = false;
+            };
+        }]);
+    </script>
+</head>
+
+<body>
+    <div class="container" ng-controller="mainController">
+        <toaster-container toaster-options="{'time-out': 3000, 'close-button': true, 'position-class': 'toast-bottom-right'}"></toaster-container>
+        
+        <h1>Youtube XML Annotations to SRT</h1>
+        <p>
+            Convert Youtube Annotations (XML) to subtitles format (SRT)<br />
+            Bugs? issues? contribute. The code is available at <strong><a href="https://github.com/germanger/youtubeannotations-to-srt-js" target="_blank">GitHub</a></strong>
+        </p>
+        
+        <h2>How to use</h2>
+        <p>
+            Get the annotations XML file using this URL:
+            <code>https://www.youtube.com/annotations_invideo?video_id=YOUR_VIDEO_ID</code>, replacing <code>YOUR_VIDEO_ID</code> with the real YouTube id (which is available in the URL of the video). Save it to your disk.
+        </p>
+        
+        <p>Finally, locate the file in the following form and convert.</p>
+
+        <form id="form" method="post" enctype="multipart/form-data" style="margin-top: 50px">
+            <div class="form-group">
+                <label>XML file</label>
+                <input type="file" id="files" class="form-control" ng-disabled="processing" accept=".xml" file-reader="xmlContent" />
+            </div>
+
+            <div class="form-group">
+                <button class="btn btn-default" ng-click="process()" ng-disabled="processing">
+                    <span ng-show="processing">Processing...</span>
+                    <span ng-show="!processing">Convert</span>
+                </button>
+
+                <p ng-show="response.error" style="color: red">{{response.message}}</p>
+            </div>
+        </form>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <h2>XML input</h2>
+                <div id="xmlContent" style="overflow-y: scroll; height: 300px; border: 1px solid gray"><code>{{xmlContent}}</code></div>
+                <vertical-resizer target-min-height="50px" target-selector="#xmlContent"></vertical-resizer>
+            </div>
+            <div class="col-md-6">
+                <h2>SRT output</h2>
+                <div id="subtitleLines" style="overflow-y: scroll; height: 300px; border: 1px solid gray">
+                    <table class="table table-condensed table-striped">
+                        <tr ng-repeat="subtitleLine in subtitleLines track by $index">
+                            <td>
+                                <span>{{$index}}</span><br/>
+                                <span>{{subtitleLine.startTime}} --> {{subtitleLine.endTime}}</span><br/>
+                                <span>{{subtitleLine.text}}<br/><br/>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <vertical-resizer target-min-height="50px" target-selector="#subtitleLines"></vertical-resizer>
+            </div>
+        </div>
+
+        <div ng-show="response.results.length > 0">
+            <p>
+                Finished processing.
+            </p>
+
+            <table class="table table-bordered table-striped">
+                <tr>
+                    <th>Source file</th>
+                    <th>Result</th>
+                </tr>
+                <tr ng-repeat="result in response.results">
+                    <td>{{result.source}}</td>
+                    <td>
+                        <span style="color: red" ng-show="result.error">{{result.errorMessage}}</span>
+                        <span ng-show="!result.error">OK - <a href="{{result.downloadLink}}" target="_blank">Descargar</a></span>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <hr style="margin-top: 50px" />
+
+        <h2>Changelog</h2>
+        <ul>
+            <li>v1.0 (2015-07-20): First version</li>
+        </ul>
+
+        <hr />
+        <p style="text-align: center;">Developed by <a href="http://www.manger.cl" targer="_blank">manger.cl</a></p>
+    </div>
+
+</body>
+</html>
