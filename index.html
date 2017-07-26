@@ -30,6 +30,10 @@
     <script>
         angular.module('youtubeAnnotationsToSrtApp', ['ui.bootstrap', 'toaster', 'verticalResizer']);
         
+        angular.module('youtubeAnnotationsToSrtApp').config(['$compileProvider', function($compileProvider) {
+            $compileProvider.aHrefSanitizationWhitelist(/^\s*(https?|ftp|mailto|file|blob):/);
+        }]);
+        
         angular.module('youtubeAnnotationsToSrtApp').directive('fileReader', function() {
             return {
                 scope: {
@@ -58,6 +62,10 @@
 
             $scope.xmlContent = "";
             $scope.subtitleLines = [];
+            $scope.error = null;
+            $scope.outputFile = {
+                content: ""
+            };
             
             $scope.formatTime = function(timeCode) {
                 if (timeCode.length == 9) {
@@ -74,21 +82,40 @@
             $scope.process = function () {
                 $scope.processing = true;
                 
-                // Parse with jQuery
-                var xmlDoc = $.parseXML($scope.xmlContent);
-                
-                $(xmlDoc).find("annotation").each(function(index) {
-                    $scope.subtitleLines.push({
-                        text: $(this).find("TEXT").text(),
-                        startTime: $scope.formatTime($(this).find("rectRegion:eq(0)").attr("t")),
-                        endTime: $scope.formatTime($(this).find("rectRegion:eq(1)").attr("t"))
+                try
+                {
+                    // Parse with jQuery
+                    var xmlDoc = $.parseXML($scope.xmlContent);
+                    
+                    $(xmlDoc).find("annotation").each(function(index) {
+                        $scope.subtitleLines.push({
+                            text: $(this).find("TEXT").text(),
+                            startTime: $scope.formatTime($(this).find("rectRegion:eq(0)").attr("t")),
+                            endTime: $scope.formatTime($(this).find("rectRegion:eq(1)").attr("t"))
+                        });
                     });
-                });
-                
-                // Sort
-                $scope.subtitleLines = $filter("orderBy")($scope.subtitleLines, "startTime");
+                    
+                    // Sort by startTime asc
+                    $scope.subtitleLines = $filter("orderBy")($scope.subtitleLines, "startTime");
+                    
+                    // Create file content
+                    for (var i = 0; i < $scope.subtitleLines.length; i++) {
+                        $scope.outputFile.content += i + "\r\n" + $scope.subtitleLines[i].startTime + " --\> " + $scope.subtitleLines[i].endTime + "\r\n" + $scope.subtitleLines[i].text + "\r\n\r\n";
+                    }
+                    
+                    var blob = new Blob([$scope.outputFile.content], {type: 'text/plain'});
+                    $scope.outputFile.blob = URL.createObjectURL(blob);
+                    
+                    $scope.error = null;
+                } catch (e) {
+                    $scope.error = e.message;
+                }
                 
                 $scope.processing = false;
+            };
+            
+            $scope.saveOutput = function() {
+            
             };
         }]);
     </script>
@@ -109,29 +136,29 @@
             Get the annotations XML file using this URL:
             <code>https://www.youtube.com/annotations_invideo?video_id=YOUR_VIDEO_ID</code>, replacing <code>YOUR_VIDEO_ID</code> with the real YouTube id (which is available in the URL of the video). Save it to your disk.
         </p>
-        
-        <p>Finally, locate the file in the following form and convert.</p>
 
         <form id="form" method="post" enctype="multipart/form-data" style="margin-top: 50px">
             <div class="form-group">
                 <label>XML file</label>
                 <input type="file" id="files" class="form-control" ng-disabled="processing" accept=".xml" file-reader="xmlContent" />
             </div>
-
-            <div class="form-group">
-                <button class="btn btn-default" ng-click="process()" ng-disabled="processing">
-                    <span ng-show="processing">Processing...</span>
-                    <span ng-show="!processing">Convert</span>
-                </button>
-
-                <p ng-show="response.error" style="color: red">{{response.message}}</p>
-            </div>
         </form>
         
         <div class="row">
             <div class="col-md-6">
                 <h2>XML input</h2>
-                <textarea class="form-control input-sm" rows="15" ng-model="xmlContent" style="resize: vertical;"></textarea>
+                <div class="form-group">
+                    <textarea class="form-control input-sm" rows="15" ng-model="xmlContent" style="resize: vertical;"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <button class="btn btn-default btn-info" ng-click="process()" ng-disabled="processing">
+                        <span ng-show="processing">Processing...</span>
+                        <span ng-show="!processing">Convert</span>
+                    </button>
+
+                    <p ng-if="error" style="color: red">{{error}}</p>
+                </div>
             </div>
             <div class="col-md-6">
                 <h2>SRT output</h2>
@@ -147,6 +174,10 @@
                     </table>
                 </div>
                 <vertical-resizer target-min-height="50px" target-selector="#subtitleLines"></vertical-resizer>
+
+                <div class="form-group">
+                    <a ng-if="subtitleLines.length > 0" target="_blank" class="btn btn-default btn-info" ng-href="{{ outputFile.blob }}" download="subs.srt">Save (Right click > Save As...)</a>
+                </div>
             </div>
         </div>
 
