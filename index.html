@@ -131,8 +131,8 @@
         <div class="row">
             <div class="col-md-6">
                 <h2>XML input</h2>
-                <div id="xmlContent" style="overflow-y: scroll; height: 300px; border: 1px solid gray"><code>{{xmlContent}}</code></div>
-                <vertical-resizer target-min-height="50px" target-selector="#xmlContent"></vertical-resizer>
+                <textarea class="form-control input-sm" rows="15" ng-model="xmlContent" style="resize: vertical;"></textarea>
+                <div id="xmlContent" style="overflow-y: scroll; height: 300px; border: 1px solid gray"><code></code></div>
             </div>
             <div class="col-md-6">
                 <h2>SRT output</h2>
